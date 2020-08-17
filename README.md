@@ -14,7 +14,7 @@
 # Открываем терминал - Ctrl+Alt+T
 
 # Запускаем скрипт, который скачает всё необходимое для установки и запустит установку
-# curl -sSL https://raw.githubusercontent.com/GMIG/Instruments/master/install-instruments-local.sh | bash
+# curl -sSL https://raw.githubusercontent.com/GMIG/Instruments-Ansible/master/install-instruments-local.sh | bash
 
 
 -- Настройка удаленных компьютеров
@@ -23,7 +23,7 @@
 # sshpass нужен для первоначальной авторизации по паролю
 
 # Запускаем скрипт, который скачает всё необходимое для установки
-# curl -sSL https://raw.githubusercontent.com/GMIG/Instruments/master/install-instruments-network.sh | bash
+# curl -sSL https://raw.githubusercontent.com/GMIG/Instruments-Ansible/master/install-instruments-network.sh | bash
 
 # необходмо открыть файл hosts и вписать туда имена и ip адреса всех настраиваемых Raspberry
 # также если вы меняли стандартные имя пользователя или пароль, необходимо их указать.
@@ -38,8 +38,9 @@ ansible-playbook base-init.yaml
 ####
 
 В результате работы скрипта, на Raspberry будут произведены необходимые настройки, установлены необходимые пакеты и добавлен в автозагрузку демон управления Инструментами. 
-Можно проверить что все работает выполнив команду
+Можно проверить что все работает выполнив команды
 
+cd /home/pi/Instruments/main/
 /home/pi/.local/bin/pipenv run python /home/pi/Instruments/main/Main.py cl
 
 Далее в зависимости от сценария настраивается программа и если необходимо управление - демон

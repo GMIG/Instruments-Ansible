@@ -28,6 +28,7 @@
         src: "/lib/systemd/system/watchdog.service"
         dest: "/etc/systemd/system/multi-user.target.wants/watchdog.service"
         state: link  
+      become: yes
         
     - name: Check watchdog conf file exists
       stat:
@@ -45,6 +46,7 @@
         line: "watchdog-device = /dev/watchdog \n watchdog-timeout = 10 \n interval = 2 \n max-load-1 = 24"
         state: present
       when: file_watchdog
+      become: yes
           
     
     - name: Create Instruments directory
