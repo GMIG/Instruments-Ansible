@@ -1,0 +1,35 @@
+- hosts: raspberry-all
+  become: yes
+  vars:
+    my_ntp_server: 10.6.0.254
+    my_timezone: Europe/Moscow
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Updates apt cache
+      apt: update_cache=true
+
+    - name: Set timezone to var mytimezone
+      timezone:
+        name: '{{ my_timezone|quote }}'
+ 
+    - name: Installs necessary packages
+      apt:
+        pkg:
+          - ntp
+
+    - name: Stop service ntp, if not stoped
+      service:
+        name: ntp
+        state: stopped
+        
+    - name: Add local ntp server to ntp.conf
+      lineinfile:
+        path: /etc/ntp.conf
+        insertafter: '^#server ntp.your-provider.example'
+        line: 'server {{ my_ntp_server|quote }}'
+       
+    - name: Start service ntp, if not started
+      service:
+        name: ntp
+        enabled: yes
+        state: started

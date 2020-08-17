@@ -1,0 +1,201 @@
+- hosts: raspberry-all
+  connection: local
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Updates and upgrade apt cache
+      become: yes
+      apt: 
+        update_cache: yes
+        upgrade: yes
+        cache_valid_time: 86400 #One day
+      
+    - name: Installs necessary packages
+      apt:
+        pkg:
+          - mpv 
+          - libmpv1
+          - git
+          - unclutter
+          - exfat-fuse
+          - exfat-utils
+          - watchdog
+      become: yes
+      ignore_errors: true
+      
+    - name: Create symbolic link for autorun watchdog
+      file:
+        src: "/lib/systemd/system/watchdog.service"
+        dest: "/etc/systemd/system/multi-user.target.wants/watchdog.service"
+        state: link  
+        
+    - name: Check watchdog conf file exists
+      stat:
+         path: /etc/watchdog.conf
+      register: file_watchdog
+
+    - debug:
+        msg: "Watchdog file does not exist"
+      when: not file_watchdog
+
+    - name: Add watchdog param 
+      lineinfile: 
+        path: /etc/watchdog.conf
+        regexp: '^watchdog-device = /dev/watchdog \n watchdog-timeout = 10 \n interval = 2 \n max-load-1 = 24'
+        line: "watchdog-device = /dev/watchdog \n watchdog-timeout = 10 \n interval = 2 \n max-load-1 = 24"
+        state: present
+      when: file_watchdog
+          
+    
+    - name: Create Instruments directory
+      block:  
+        - name: Check directory Instruments exists
+          stat:
+            path: /home/{{ ansible_user }}/Instruments
+          register: files_to_delete
+
+        - debug:
+            msg: "Instruments exists directory"
+          when: files_to_delete.stat.exists and files_to_delete.stat.isdir
+
+        - name: Delete exists directory Instruments
+          file:
+            path: /home/{{ ansible_user }}/Instruments
+            state: absent
+          when: files_to_delete.stat.exists and files_to_delete.stat.isdir
+
+        - name: Download Instruments from git
+          git:
+            repo: 'https://github.com/GMIG/Instruments.git'
+            dest: /home/{{ ansible_user }}/Instruments
+    
+        - name: Change this to file app
+          shell:
+            cmd: 'chmod -R 777  /home/{{ ansible_user }}/Instruments'
+            
+      become: yes
+        
+    - name: Set aliases
+      block:
+        - name: Set alias to python3
+          lineinfile:
+            path: /home/{{ ansible_user }}/.bashrc
+            regexp: '^alias python=python3'
+            line: 'alias python=python3'   
+            
+        - name: Set alias to pip3
+          lineinfile:
+            path: /home/{{ ansible_user }}/.bashrc
+            regexp: '^alias pip=pip3'
+            line: 'alias pip=pip3' 
+            
+        - name: export PATH to .local/bin
+          lineinfile:
+            path: /home/{{ ansible_user }}/.bashrc
+            regexp: '^export PATH='
+            line: 'export PATH=$PATH:/home/{{ ansible_user }}/.local/bin'
+            
+        - name: Update bashrc
+          shell:
+            cmd: '. ~/.bashrc'
+        
+    - name: Install virtual environment for Instruments
+      pip:
+        name: pipenv
+        extra_args: --user
+
+    - name: Install input-output module for Instruments
+      pip:
+        name: platformio
+        extra_args: -U
+        
+    - name: Remove exists virtual environment for daemon instruments
+      shell:
+        cmd: '/home/{{ ansible_user }}/.local/bin/pipenv --rm'
+        chdir: /home/{{ ansible_user }}/Instruments/daemon
+      ignore_errors: true
+                
+    - name: Install dependencies in virtual environment for daemon instruments
+      shell:
+        cmd: '/home/{{ ansible_user }}/.local/bin/pipenv update'
+        chdir: /home/{{ ansible_user }}/Instruments/daemon
+
+    - name: Add daemon to autorun
+      block:
+        - name: Check autorun script exists
+          stat:
+            path: /home/{{ ansible_user }}/Instruments/autorun-daemon.sh
+          register: file_to_delete
+
+        - debug:
+            msg: "Autorun script exists"
+          when: file_to_delete.stat.exists
+
+        - name: Delete exists autorun script
+          file:
+            path: /home/{{ ansible_user }}/Instruments/autorun-daemon.sh
+            state: absent
+          when: file_to_delete.stat.exists
+            
+        - name: Create autorun script
+          lineinfile: 
+            path: /home/{{ ansible_user }}/Instruments/autorun-daemon.sh
+            regexp: '^'
+            insertbefore: BOF
+            line: "#!/bin/bash\n \n# Hide the mouse from the display\nunclutter &\n \ncd /home/{{ ansible_user }}/Instruments/daemon\n/home/{{ ansible_user }}/.local/bin/pipenv run python /home/{{ ansible_user }}/Instruments/daemon/daemonMain.py"
+            state: present
+            create: yes
+            mode: +x
+
+        - name: Check autostart file exists
+          stat:
+            path: /etc/xdg/lxsession/LXDE-pi/autostart
+          register: file_autostart
+
+        - debug:
+            msg: "Autostart file does not exist"
+          when: not file_autostart
+
+        - name: Add daemon to autostart 
+          lineinfile: 
+            path: /etc/xdg/lxsession/LXDE-pi/autostart
+            regexp: '^@/home/{{ ansible_user }}/Instruments/autorun-daemon.sh'
+            line: "@/home/{{ ansible_user }}/Instruments/autorun-daemon.sh"
+            state: present
+          when: file_autostart
+      
+      become: yes
+        
+        
+    - name: Remove exists virtual environment for main instruments
+      shell:
+        cmd: '/home/{{ ansible_user }}/.local/bin/pipenv --rm'
+        chdir: /home/{{ ansible_user }}/Instruments/main
+      ignore_errors: true
+                
+    - name: Install dependencies in virtual environment for main instruments
+      shell:
+        cmd: '/home/{{ ansible_user }}/.local/bin/pipenv update'
+        chdir: /home/{{ ansible_user }}/Instruments/main
+    
+    # Настройка параметров Расбера
+        
+    - name: Disable screensaver
+      become: yes
+      lineinfile: 
+        path: /etc/lightdm/lightdm.conf
+        regexp: '^xserver-command=X -s 0 dpms'
+        insertafter: '^#xserver-command=X'
+        line: "xserver-command=X -s 0 dpms"
+        state: present
+
+    #Использовать HDMI режим независимо от того, подключен ли монитор. Могут быть проблемы при смене монитора или разрешения
+    - name: Use HDMI mode forever
+      become: yes
+      lineinfile: 
+        path: /boot/config.txt
+        regexp: '^hdmi_force_hotplug=1'
+        insertafter: '^#hdmi_force_hotplug=1'
+        line: "hdmi_force_hotplug=1"
+        state: present
+      
